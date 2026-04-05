@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0f">
+<title>Alerta Zonas GPS</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --border: rgba(255,255,255,0.08);
+    --text: #f0f0f5;
+    --muted: #888899;
+    --accent-a: #00d4ff;
+    --accent-b: #ff6b35;
+    --accent-c: #7c3aed;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --radius: 16px;
+    --font: 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    padding-bottom: 2rem;
+  }
+
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 1.5rem 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .header h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .header p {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .gps-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.75rem 1.5rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .dot.active { background: var(--green); animation: pulse 1.5s infinite; }
+  .dot.warning { background: var(--yellow); }
+  .dot.error { background: var(--red); }
+
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50% { opacity:0.5; transform:scale(0.85); }
+  }
+
+  #gps-status { color: var(--muted); flex: 1; }
+  #gps-accuracy { color: var(--muted); font-size: 0.7rem; }
+
+  .container { padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 1rem; }
+
+  .zone-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .zone-card.alert-active {
+    animation: alert-red 0.6s infinite alternate;
+    border-color: #ef4444 !important;
+  }
+
+  @keyframes alert-red {
+    from { background: #3a0a0a; border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.3); }
+    to   { background: #5a0e0e; border-color: #ff6b6b; box-shadow: 0 0 0 6px rgba(239,68,68,0.1); }
+  }
+
+  .zone-card.alert-active .zone-header {
+    background: rgba(239,68,68,0.15);
+  }
+
+  .btn-silence {
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 0.75rem;
+    display: none;
+    animation: pulse-btn 0.8s infinite alternate;
+    letter-spacing: 0.03em;
+  }
+  .btn-silence.visible { display: block; }
+  @keyframes pulse-btn {
+    from { background: #ef4444; transform: scale(1); }
+    to   { background: #dc2626; transform: scale(1.02); }
+  }
+
+  .zone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .zone-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .zone-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    font-weight: 800;
+    background: color-mix(in srgb, var(--zone-color) 15%, transparent);
+    color: var(--zone-color);
+    border: 1px solid color-mix(in srgb, var(--zone-color) 30%, transparent);
+  }
+
+  .zone-name { font-size: 1rem; font-weight: 600; }
+  .zone-sub  { font-size: 0.7rem; color: var(--muted); margin-top: 1px; }
+
+  .zone-status-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .zone-status-badge.saved { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+  .zone-status-badge.inside { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); animation: pulse 1s infinite; }
+
+  .zone-body { padding: 1rem 1.25rem; }
+
+  .zone-info-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .info-chip {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .info-chip span {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .distance-bar-wrap {
+    margin-bottom: 1rem;
+  }
+  .distance-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .distance-bar-track {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .distance-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--zone-color);
+    width: 0%;
+    transition: width 0.5s ease;
+  }
+
+  .zone-actions { display: flex; gap: 0.6rem; }
+
+  .btn {
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  .btn:active { transform: scale(0.96); }
+
+  .btn-mark {
+    background: color-mix(in srgb, var(--zone-color) 18%, transparent);
+    color: var(--zone-color);
+    border: 1px solid color-mix(in srgb, var(--zone-color) 35%, transparent);
+  }
+  .btn-mark:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .btn-clear {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    flex: 0 0 auto;
+    padding: 0.75rem 1rem;
+  }
+  .btn-clear:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-test {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
+    flex: 0 0 auto;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .radius-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0.75rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem 0.75rem;
+  }
+  .radius-row label { font-size: 0.72rem; color: var(--muted); flex: 1; }
+  .radius-input {
+    width: 70px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    text-align: center;
+  }
+  .radius-input:focus { outline: none; border-color: var(--zone-color); }
+  .radius-unit { font-size: 0.72rem; color: var(--muted); }
+
+  .requirements-note {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 0 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .requirements-note span { color: var(--yellow); }
+
+  .log-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+  }
+  .log-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 0.75rem;
+  }
+  .log-entries { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .log-entry {
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex; gap: 8px;
+  }
+  .log-entry time { color: color-mix(in srgb, var(--muted) 50%, transparent); flex-shrink: 0; }
+  .log-entry.alert { color: var(--red); }
+  .log-entry.ok    { color: var(--green); }
+  .log-entry.info  { color: var(--accent-a); }
+
+  .install-banner {
+    background: color-mix(in srgb, var(--accent-a) 8%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent-a) 25%, transparent);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    font-size: 0.78rem;
+    color: var(--text);
+    line-height: 1.5;
+    display: none;
+  }
+  .install-banner strong { color: var(--accent-a); }
+
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .overlay.show { display: flex; }
+  .overlay-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+    animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes pop { from { transform: scale(0.85); opacity:0; } to { transform:scale(1); opacity:1; } }
+
+  .overlay-icon { font-size: 3rem; margin-bottom: 1rem; }
+  .overlay-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .overlay-sub   { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.5; }
+  .overlay-close {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.75rem 2rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📍 Alerta Zonas GPS</h1>
+  <p>Alertas sonoras de proximidad</p>
+</div>
+
+<div class="gps-bar">
+  <div class="dot" id="gps-dot"></div>
+  <span id="gps-status">Iniciando GPS…</span>
+  <span id="gps-accuracy"></span>
+</div>
+
+<div class="container">
+
+  <div class="install-banner" id="install-banner">
+    <strong>Tip: instalá como app</strong><br>
+    En Chrome, tocá los 3 puntos (⋮) → "Agregar a pantalla de inicio" para usarla como app nativa con alertas en segundo plano.
+  </div>
+
+  <!-- ZONA A -->
+  <div class="zone-card" id="card-a" style="--zone-color: var(--accent-a)">
+    <div class="zone-header">
+      <div class="zone-title">
+        <div class="zone-icon">A</div>
+        <div>
+          <div class="zone-name">Zona A</div>
+          <div class="zone-sub">Radio de alerta: 40 m</div>
+        </div>
+      </div>
+      <div class="zone-status-badge" id="badge-a">Sin marcar</div>
+    </div>
+    <div class="zone-body">
+      <div class="zone-info-row">
+        <div class="info-chip">Coord.<span id="coord-a">—</span></div>
+        <div class="info-chip">Precisión<span id="prec-a">—</span></div>
+        <div class="info-chip">Distancia<span id="dist-a">—</span></div>
+      </div>
+      <div class="radius-row" style="--zone-color: var(--accent-a)">
+        <label>🚗 Radio de alerta</label>
+        <input class="radius-input" id="radius-a" type="number" min="10" max="5000" value="40" onchange="saveRadius('a')" style="border-color: var(--accent-a)">
+        <span class="radius-unit">metros</span>
+      </div>
+      <div class="distance-bar-wrap">
+        <div class="distance-bar-label"><span>0 m</span><span id="bar-label-a">40 m zona</span><span id="bar-max-a">100 m</span></div>
+        <div class="distance-bar-track"><div class="distance-bar-fill" id="bar-a"></div></div>
+      </div>
+      <div class="zone-actions">
+        <button class="btn btn-mark" id="btn-a" onclick="markZone('a')">
+          📌 Marcar Zona A
+        </button>
+        <button class="btn btn-test" onclick="testAlert('a')" title="Probar sonido">🔊</button>
+        <button class="btn btn-clear" id="clear-a" onclick="clearZone('a')" disabled title="Borrar zona">✕</button>
+      </div>
+      <div class="requirements-note" id="req-a">
+        <span>Necesitás precisión ≤ 6 m para marcar</span>
+      </div>
+      <button class="btn-silence" id="silence-a" onclick="silenceZone('a')">🔕 Silenciar Zona A</button>
+    </div>
+  </div>
+  <div class="zone-card" id="card-b" style="--zone-color: var(--accent-b)">
+    <div class="zone-header">
+      <div class="zone-title">
+        <div class="zone-icon">B</div>
+        <div>
+          <div class="zone-name">Zona B</div>
+          <div class="zone-sub">Radio de alerta: 40 m</div>
+        </div>
+      </div>
+      <div class="zone-status-badge" id="badge-b">Sin marcar</div>
+    </div>
+    <div class="zone-body">
+      <div class="zone-info-row">
+        <div class="info-chip">Coord.<span id="coord-b">—</span></div>
+        <div class="info-chip">Precisión<span id="prec-b">—</span></div>
+        <div class="info-chip">Distancia<span id="dist-b">—</span></div>
+      </div>
+      <div class="radius-row" style="--zone-color: var(--accent-b)">
+        <label>🚗 Radio de alerta</label>
+        <input class="radius-input" id="radius-b" type="number" min="10" max="5000" value="40" onchange="saveRadius('b')" style="border-color: var(--accent-b)">
+        <span class="radius-unit">metros</span>
+      </div>
+      <div class="distance-bar-wrap">
+        <div class="distance-bar-label"><span>0 m</span><span id="bar-label-b">40 m zona</span><span id="bar-max-b">100 m</span></div>
+        <div class="distance-bar-track"><div class="distance-bar-fill" id="bar-b"></div></div>
+      </div>
+      <div class="zone-actions">
+        <button class="btn btn-mark" id="btn-b" onclick="markZone('b')">
+          📌 Marcar Zona B
+        </button>
+        <button class="btn btn-test" onclick="testAlert('b')" title="Probar sonido">🔊</button>
+        <button class="btn btn-clear" id="clear-b" onclick="clearZone('b')" disabled title="Borrar zona">✕</button>
+      </div>
+      <div class="requirements-note" id="req-b">
+        <span>Necesitás precisión ≤ 6 m para marcar</span>
+      </div>
+      <button class="btn-silence" id="silence-b" onclick="silenceZone('b')">🔕 Silenciar Zona B</button>
+    </div>
+  </div>
+  <div class="zone-card" id="card-c" style="--zone-color: var(--accent-c)">
+    <div class="zone-header">
+      <div class="zone-title">
+        <div class="zone-icon">C</div>
+        <div>
+          <div class="zone-name">Zona C</div>
+          <div class="zone-sub">Radio de alerta: 40 m</div>
+        </div>
+      </div>
+      <div class="zone-status-badge" id="badge-c">Sin marcar</div>
+    </div>
+    <div class="zone-body">
+      <div class="zone-info-row">
+        <div class="info-chip">Coord.<span id="coord-c">—</span></div>
+        <div class="info-chip">Precisión<span id="prec-c">—</span></div>
+        <div class="info-chip">Distancia<span id="dist-c">—</span></div>
+      </div>
+      <div class="radius-row" style="--zone-color: var(--accent-c)">
+        <label>🚗 Radio de alerta</label>
+        <input class="radius-input" id="radius-c" type="number" min="10" max="5000" value="40" onchange="saveRadius('c')" style="border-color: var(--accent-c)">
+        <span class="radius-unit">metros</span>
+      </div>
+      <div class="distance-bar-wrap">
+        <div class="distance-bar-label"><span>0 m</span><span id="bar-label-c">40 m zona</span><span id="bar-max-c">100 m</span></div>
+        <div class="distance-bar-track"><div class="distance-bar-fill" id="bar-c"></div></div>
+      </div>
+      <div class="zone-actions">
+        <button class="btn btn-mark" id="btn-c" onclick="markZone('c')">
+          📌 Marcar Zona C
+        </button>
+        <button class="btn btn-test" onclick="testAlert('c')" title="Probar sonido">🔊</button>
+        <button class="btn btn-clear" id="clear-c" onclick="clearZone('c')" disabled title="Borrar zona">✕</button>
+      </div>
+      <div class="requirements-note" id="req-c">
+        <span>Necesitás precisión ≤ 6 m para marcar</span>
+      </div>
+      <button class="btn-silence" id="silence-c" onclick="silenceZone('c')">🔕 Silenciar Zona C</button>
+    </div>
+  </div>
+    <div class="log-title">Registro de eventos</div>
+    <div class="log-entries" id="log"></div>
+  </div>
+
+</div>
+
+<!-- Alert overlay -->
+<div class="overlay" id="overlay">
+  <div class="overlay-box">
+    <div class="overlay-icon" id="ov-icon">⚠️</div>
+    <div class="overlay-title" id="ov-title">Alerta Zona A</div>
+    <div class="overlay-sub" id="ov-sub">Estás dentro del radio de 40 metros</div>
+    <button class="overlay-close" onclick="closeOverlay()">Entendido</button>
+  </div>
+</div>
+
+<script>
+const ACCURACY_REQUIRED = 6;
+const ALERT_COOLDOWN = 30000;
+
+function getRadius(z) {
+  const val = parseInt(document.getElementById('radius-' + z).value);
+  return (isNaN(val) || val < 10) ? 40 : val;
+}
+
+function saveRadius(z) {
+  const val = getRadius(z);
+  localStorage.setItem('radius_' + z, val);
+  const maxVal = Math.max(val * 2.5, val + 50);
+  document.getElementById('bar-label-' + z).textContent = val + ' m zona';
+  document.getElementById('bar-max-' + z).textContent = Math.round(maxVal) + ' m';
+  addLog(`Radio de ${zoneLabels[z]} actualizado a ${val} m`, 'info');
+}
+
+function loadRadii() {
+  ['a','b','c'].forEach(z => {
+    const saved = localStorage.getItem('radius_' + z);
+    if (saved) {
+      document.getElementById('radius-' + z).value = saved;
+      const val = parseInt(saved);
+      const maxVal = Math.max(val * 2.5, val + 50);
+      document.getElementById('bar-label-' + z).textContent = val + ' m zona';
+      document.getElementById('bar-max-' + z).textContent = Math.round(maxVal) + ' m';
+    }
+  });
+}
+
+const zones = { a: null, b: null, c: null };
+const lastAlert = { a: 0, b: 0, c: 0 };
+const insideZone = { a: false, b: false, c: false };
+let currentPos = null;
+let audioCtx = null;
+
+const zoneLabels = { a: 'Zona A', b: 'Zona B', c: 'Zona C' };
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function speakAlert(zoneName) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance('Alerta ' + zoneName);
+    u.lang = 'es-AR';
+    u.rate = 0.95;
+    u.pitch = 1.1;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  }
+  playBeeps();
+}
+
+function playBeeps() {
+  try {
+    const ctx = getAudioCtx();
+    [0, 0.25, 0.5].forEach(t => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.setValueAtTime(880, ctx.currentTime + t);
+      o.frequency.setValueAtTime(1100, ctx.currentTime + t + 0.1);
+      g.gain.setValueAtTime(0.5, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.22);
+      o.start(ctx.currentTime + t);
+      o.stop(ctx.currentTime + t + 0.23);
+    });
+  } catch(e) {}
+}
+
+function testAlert(zone) {
+  getAudioCtx();
+  speakAlert(zoneLabels[zone]);
+  addLog(`Prueba de sonido: ${zoneLabels[zone]}`, 'info');
+}
+
+function addLog(msg, type='') {
+  const log = document.getElementById('log');
+  const e = document.createElement('div');
+  e.className = 'log-entry ' + type;
+  const now = new Date();
+  e.innerHTML = `<time>${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}</time><span>${msg}</span>`;
+  log.prepend(e);
+  while (log.children.length > 40) log.removeChild(log.lastChild);
+}
+
+function loadZones() {
+  ['a','b','c'].forEach(z => {
+    const s = localStorage.getItem('zone_' + z);
+    if (s) {
+      zones[z] = JSON.parse(s);
+      updateZoneUI(z);
+    }
+  });
+}
+
+function saveZones() {
+  ['a','b','c'].forEach(z => {
+    if (zones[z]) localStorage.setItem('zone_' + z, JSON.stringify(zones[z]));
+    else localStorage.removeItem('zone_' + z);
+  });
+}
+
+function markZone(z) {
+  if (!currentPos) { addLog('Sin posición GPS aún', 'alert'); return; }
+  const acc = currentPos.accuracy;
+  if (acc > ACCURACY_REQUIRED) {
+    addLog(`Precisión actual ${acc.toFixed(1)} m — esperá precisión ≤ ${ACCURACY_REQUIRED} m`, 'alert');
+    return;
+  }
+  zones[z] = { lat: currentPos.lat, lng: currentPos.lng, acc: acc, ts: Date.now() };
+  saveZones();
+  updateZoneUI(z);
+  addLog(`${zoneLabels[z]} marcada: ${currentPos.lat.toFixed(6)}, ${currentPos.lng.toFixed(6)} (±${acc.toFixed(1)} m)`, 'ok');
+}
+
+function clearZone(z) {
+  zones[z] = null;
+  insideZone[z] = false;
+  saveZones();
+  updateZoneUI(z);
+  updateDistanceUI(z, null);
+  addLog(`${zoneLabels[z]} borrada`, 'info');
+}
+
+function updateZoneUI(z) {
+  const zone = zones[z];
+  const badge = document.getElementById('badge-' + z);
+  const btn = document.getElementById('btn-' + z);
+  const clr = document.getElementById('clear-' + z);
+  const coord = document.getElementById('coord-' + z);
+  const prec = document.getElementById('prec-' + z);
+  const req = document.getElementById('req-' + z);
+
+  if (zone) {
+    badge.textContent = 'Marcada';
+    badge.className = 'zone-status-badge saved';
+    btn.textContent = '📌 Re-marcar ' + zoneLabels[z].replace('Zona ','') ;
+    clr.disabled = false;
+    const lat = zone.lat.toFixed(5), lng = zone.lng.toFixed(5);
+    coord.textContent = lat + ', ' + lng;
+    prec.textContent = '±' + zone.acc.toFixed(1) + ' m';
+    req.style.display = 'none';
+  } else {
+    badge.textContent = 'Sin marcar';
+    badge.className = 'zone-status-badge';
+    btn.innerHTML = '📌 Marcar ' + zoneLabels[z];
+    clr.disabled = true;
+    coord.textContent = '—';
+    prec.textContent = '—';
+    req.style.display = '';
+  }
+}
+
+function updateDistanceUI(z, dist, radius) {
+  radius = radius || getRadius(z);
+  const el = document.getElementById('dist-' + z);
+  const bar = document.getElementById('bar-' + z);
+  const badge = document.getElementById('badge-' + z);
+  const card = document.getElementById('card-' + z);
+
+  if (dist === null) {
+    el.textContent = '—';
+    bar.style.width = '0%';
+    if (zones[z]) { badge.textContent = 'Marcada'; badge.className = 'zone-status-badge saved'; }
+    card.classList.remove('alert-active');
+    return;
+  }
+
+  el.textContent = dist < 1000 ? Math.round(dist) + ' m' : (dist/1000).toFixed(2) + ' km';
+
+  const maxVal = Math.max(radius * 2.5, radius + 50);
+  const pct = Math.max(0, Math.min(100, (1 - dist / maxVal) * 100));
+  bar.style.width = pct + '%';
+
+  const inside = dist <= radius;
+  if (inside) {
+    badge.textContent = '⚠ Dentro';
+    badge.className = 'zone-status-badge inside';
+    card.classList.add('alert-active');
+  } else {
+    if (zones[z]) { badge.textContent = 'Marcada'; badge.className = 'zone-status-badge saved'; }
+    card.classList.remove('alert-active');
+  }
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLng = (lng2-lng1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function checkZones(lat, lng) {
+  ['a','b','c'].forEach(z => {
+    if (!zones[z]) return;
+    const dist = haversine(lat, lng, zones[z].lat, zones[z].lng);
+    const radius = getRadius(z);
+    updateDistanceUI(z, dist, radius);
+
+    const inside = dist <= radius;
+    const now = Date.now();
+
+    if (inside && (!insideZone[z] || (now - lastAlert[z]) > ALERT_COOLDOWN)) {
+      insideZone[z] = true;
+      lastAlert[z] = now;
+      triggerAlert(z, dist);
+    } else if (!inside) {
+      if (insideZone[z]) {
+        addLog(`Saliste de ${zoneLabels[z]}`, 'info');
+        silenced[z] = false;
+        clearInterval(alertIntervals[z]);
+        alertIntervals[z] = null;
+        document.getElementById('silence-' + z).classList.remove('visible');
+        document.getElementById('card-' + z).classList.remove('alert-active');
+      }
+      insideZone[z] = false;
+    }
+  });
+}
+
+const alertIntervals = { a: null, b: null, c: null };
+const silenced = { a: false, b: false, c: false };
+
+function triggerAlert(z, dist) {
+  const label = zoneLabels[z];
+  silenced[z] = false;
+  addLog(`🚨 ALERTA: ${label} — distancia ${Math.round(dist)} m`, 'alert');
+  showOverlay(z, dist);
+  speakAlert(label);
+  document.getElementById('silence-' + z).classList.add('visible');
+
+  clearInterval(alertIntervals[z]);
+  alertIntervals[z] = setInterval(() => {
+    if (!silenced[z] && insideZone[z]) {
+      speakAlert(label);
+    } else {
+      clearInterval(alertIntervals[z]);
+      alertIntervals[z] = null;
+    }
+  }, 2000);
+}
+
+function silenceZone(z) {
+  silenced[z] = true;
+  clearInterval(alertIntervals[z]);
+  alertIntervals[z] = null;
+  window.speechSynthesis && window.speechSynthesis.cancel();
+  document.getElementById('silence-' + z).classList.remove('visible');
+  document.getElementById('card-' + z).classList.remove('alert-active');
+  closeOverlay();
+  addLog(`🔕 ${zoneLabels[z]} silenciada`, 'info');
+}
+
+let overlayTimeout = null;
+function showOverlay(z, dist) {
+  const radius = getRadius(z);
+  document.getElementById('ov-title').textContent = 'Alerta ' + zoneLabels[z];
+  document.getElementById('ov-sub').textContent = `Estás a ${Math.round(dist)} m del centro de ${zoneLabels[z]} (radio: ${radius} m)`;
+  document.getElementById('overlay').classList.add('show');
+  clearTimeout(overlayTimeout);
+  overlayTimeout = setTimeout(closeOverlay, 8000);
+}
+function closeOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function updateGPSBar(pos, status) {
+  const dot = document.getElementById('gps-dot');
+  const st = document.getElementById('gps-status');
+  const acc = document.getElementById('gps-accuracy');
+
+  if (status === 'ok') {
+    dot.className = 'dot active';
+    st.textContent = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+    const accVal = pos.accuracy;
+    acc.textContent = `±${accVal.toFixed(1)} m`;
+    acc.style.color = accVal <= 6 ? 'var(--green)' : accVal <= 15 ? 'var(--yellow)' : 'var(--red)';
+
+    ['a','b','c'].forEach(z => {
+      const btn = document.getElementById('btn-' + z);
+      if (accVal <= ACCURACY_REQUIRED) {
+        btn.disabled = false;
+        btn.title = '';
+      } else {
+        btn.disabled = true;
+        btn.title = `Precisión ${accVal.toFixed(1)} m — necesita ≤ ${ACCURACY_REQUIRED} m`;
+      }
+    });
+  } else if (status === 'searching') {
+    dot.className = 'dot warning';
+    st.textContent = 'Buscando señal GPS…';
+    acc.textContent = '';
+  } else {
+    dot.className = 'dot error';
+    st.textContent = 'Error de GPS';
+    acc.textContent = '';
+  }
+}
+
+function onPosition(position) {
+  const lat = position.coords.latitude;
+  const lng = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+  currentPos = { lat, lng, accuracy };
+  updateGPSBar(currentPos, 'ok');
+  checkZones(lat, lng);
+}
+
+function onError(err) {
+  updateGPSBar(null, 'error');
+  addLog('Error GPS: ' + err.message, 'alert');
+}
+
+function init() {
+  document.getElementById('install-banner').style.display = 'block';
+  loadZones();
+  loadRadii();
+  addLog('App iniciada — esperando GPS…', 'info');
+
+  ['a','b','c'].forEach(z => {
+    document.getElementById('btn-' + z).disabled = true;
+  });
+
+  if (!('geolocation' in navigator)) {
+    updateGPSBar(null, 'error');
+    addLog('Geolocalización no disponible en este dispositivo', 'alert');
+    return;
+  }
+
+  updateGPSBar(null, 'searching');
+
+  navigator.geolocation.watchPosition(onPosition, onError, {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 1000
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
